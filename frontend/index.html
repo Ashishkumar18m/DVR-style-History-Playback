@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DVR History Playback</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a14;
+            --bg2: #12121f;
+            --bg3: #1a1a2e;
+            --text: #e0e0f0;
+            --text2: #8888aa;
+            --accent: #00d4ff;
+            --accent2: #7b61ff;
+            --border: #252540;
+            --font: 'Space Grotesk', sans-serif;
+            --mono: 'JetBrains Mono', monospace;
+            --radius: 10px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HEADER */
+        .header {
+            width: 100%;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+        .logo-icon { color: var(--accent); font-size: 22px; }
+        .highlight { color: var(--accent); }
+
+        .header-spacer { flex: 1; }
+
+        .dropdown-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+        .dropdown-label {
+            font-family: var(--mono);
+            font-size: 8px;
+            letter-spacing: 2px;
+            color: var(--text2);
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .header select {
+            background: var(--bg3);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 7px 30px 7px 10px;
+            font-family: var(--font);
+            font-size: 13px;
+            border-radius: 7px;
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%238888aa' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            transition: all 0.2s;
+            min-width: 140px;
+        }
+        .header select:hover, .header select:focus { border-color: var(--accent); }
+        .header select option { background: var(--bg2); color: var(--text); }
+
+        /* MAIN */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 8px 16px;
+            gap: 6px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        /* VIDEO */
+        .video-section {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+            min-height: 0;
+        }
+
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: var(--radius);
+            overflow: hidden;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #videoPlayer {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
+
+        #drawCanvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            z-index: 1;
+            display: none;
+            pointer-events: none;
+        }
+        #drawCanvas.active { display: block; pointer-events: auto; }
+
+        .video-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.8);
+            color: var(--text2);
+            font-size: 16px;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 0;
+        }
+        .video-overlay.hidden { opacity: 0; }
+
+        /* CONTROLS BAR */
+        .controls-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            background: var(--bg2);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+            flex-wrap: nowrap;
+            width: 100%;
+        }
+
+        .np-section {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 130px;
+        }
+        .np-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--text2); white-space: nowrap; }
+        .np-value { font-family: var(--mono); font-size: 11px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .controls-divider { width: 1px; height: 22px; background: var(--border); border-radius: 1px; flex-shrink: 0; }
+
+        .brush-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg3);
+            padding: 4px 8px;
+            border-radius: 7px;
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .brush-toggle {
+            padding: 5px 10px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            color: var(--text2);
+            font-family: var(--mono);
+            font-size: 9px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .brush-toggle.active { background: rgba(0,212,255,0.2); border-color: var(--accent); color: var(--accent); }
+        .brush-color {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .brush-color:hover { transform: scale(1.1); }
+        .brush-color.active { border-color: #fff; box-shadow: 0 0 8px currentColor; }
+        .brush-color.hidden { display: none; }
+        .brush-tool-btn {
+            height: 22px;
+            padding: 0 7px;
+            border-radius: 5px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            font-family: var(--mono);
+            font-size: 9px;
+            color: var(--text);
+            background: var(--bg3);
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .brush-tool-btn:hover { border-color: var(--accent); }
+        .brush-tool-btn.hidden { display: none; }
+        .brush-active-eraser { background: #ffaa00 !important; color: #000 !important; border-color: #ffaa00 !important; }
+        .brush-clear-btn { color: #ff4444; }
+        .brush-clear-btn.hidden { display: none; }
+        .brush-size-slider { width: 60px; accent-color: var(--accent); cursor: pointer; }
+        .brush-size-slider.hidden { display: none; }
+
+        .speed-group {
+            display: flex;
+            background: var(--bg3);
+            border-radius: 7px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .speed-btn {
+            padding: 6px 9px;
+            background: transparent;
+            border: none;
+            border-right: 1px solid var(--border);
+            color: var(--text2);
+            font-family: var(--mono);
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .speed-btn:last-child { border-right: none; }
+        .speed-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+        .speed-btn.active { background: var(--accent); color: #000; font-weight: 700; }
+
+        .skip-btn {
+            padding: 7px 10px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 10px;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .skip-btn:hover { border-color: var(--accent); background: rgba(0,212,255,0.08); }
+
+        .ctrl-btn {
+            padding: 7px 12px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 10px;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            letter-spacing: 1px;
+            flex-shrink: 0;
+        }
+        .ctrl-btn:hover { border-color: var(--accent); background: rgba(0,212,255,0.08); }
+        .ctrl-btn.primary { background: rgba(0,212,255,0.15); border-color: var(--accent); font-weight: 600; }
+        .ctrl-btn.auto-on { border-color: var(--accent); background: rgba(0,212,255,0.2); color: var(--accent); }
+        .ctrl-btn.auto-off { opacity: 0.7; }
+
+        /* BOTTOM PANELS */
+        .bottom-panels {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+            height: 90px;
+        }
+
+        .timeline-panel {
+            flex: 2;
+            background: var(--bg2);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            flex-shrink: 0;
+        }
+        .panel-header h2 { font-size: 11px; font-weight: 600; }
+        .panel-info { font-family: var(--mono); font-size: 8px; color: var(--text2); }
+
+        #timelineCanvas { flex: 1; width: 100%; cursor: pointer; border-radius: 4px; }
+
+        .clips-panel {
+            flex: 1;
+            background: var(--bg2);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+            min-width: 180px;
+        }
+        .clips-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            flex-shrink: 0;
+        }
+        .clips-header h2 { font-size: 11px; font-weight: 600; }
+        .clip-badge { font-family: var(--mono); font-size: 8px; background: var(--bg3); padding: 2px 7px; border-radius: 10px; color: var(--text2); }
+
+        .clips-list {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            overflow-y: auto;
+            align-content: flex-start;
+        }
+        .clip-chip {
+            padding: 4px 9px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 9px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .clip-chip:hover { border-color: var(--accent); background: rgba(0,212,255,0.08); }
+        .clip-chip.playing { border-color: var(--accent); background: rgba(0,212,255,0.2); color: var(--accent); font-weight: 600; }
+
+        .empty-msg { color: var(--text2); font-size: 10px; font-style: italic; text-align: center; padding: 10px; width: 100%; }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid var(--border);
+            border-top: 2px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <!-- HEADER -->
+    <header class="header">
+        <div class="logo">
+            <span class="logo-icon">◈</span>
+            <span>DVR<span class="highlight">Playback</span></span>
+        </div>
+        <div class="header-spacer"></div>
+        <div class="dropdown-group">
+            <span class="dropdown-label">📹 Camera</span>
+            <select id="cameraSelect">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+        <div class="dropdown-group">
+            <span class="dropdown-label">📅 Date</span>
+            <select id="dateSelect">
+                <option value="">Select date...</option>
+            </select>
+        </div>
+        <div class="dropdown-group">
+            <span class="dropdown-label">🎬 Clip</span>
+            <select id="clipSelect">
+                <option value="">Select clip...</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- MAIN -->
+    <div class="main-container">
+        <div class="video-section">
+            <div class="video-wrapper" id="videoWrapper">
+                <video id="videoPlayer" controls></video>
+                <canvas id="drawCanvas"></canvas>
+                <div class="video-overlay" id="videoOverlay">
+                    <p>◈ Select Camera → Date → Clip to start</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls-bar">
+            <div class="np-section">
+                <span class="np-label">NOW PLAYING:</span>
+                <span class="np-value" id="nowPlayingText">No clip selected</span>
+            </div>
+            <div class="controls-divider"></div>
+            <div class="brush-group">
+                <button class="brush-toggle" id="brushToggle" title="Toggle Drawing">✏️ DRAW</button>
+                <button class="brush-color active hidden" id="colorRed" data-color="#ff3333" style="background:#ff3333;"></button>
+                <button class="brush-color hidden" id="colorBlue" data-color="#3399ff" style="background:#3399ff;"></button>
+                <button class="brush-tool-btn hidden" id="eraserBtn">⌫ Erase</button>
+                <input type="range" class="brush-size-slider hidden" id="brushSize" min="1" max="15" value="3">
+                <button class="brush-tool-btn brush-clear-btn hidden" id="clearBrushBtn">✕ Clear</button>
+            </div>
+            <div class="controls-divider"></div>
+            <div class="speed-group">
+                <button class="speed-btn" data-speed="0.5">0.5x</button>
+                <button class="speed-btn active" data-speed="1">1x</button>
+                <button class="speed-btn" data-speed="1.5">1.5x</button>
+                <button class="speed-btn" data-speed="2">2x</button>
+            </div>
+            <button class="skip-btn" id="skipBackBtn">⏪ -10s</button>
+            <button class="skip-btn" id="skipFwdBtn">⏩ +10s</button>
+            <div class="controls-divider"></div>
+            <button class="ctrl-btn" id="prevBtn">⏮ PREV</button>
+            <button class="ctrl-btn primary" id="playBtn">▶ PLAY</button>
+            <button class="ctrl-btn" id="nextBtn">NEXT ⏭</button>
+            <button class="ctrl-btn auto-off" id="autoBtn">🔁 AUTO OFF</button>
+        </div>
+
+        <div class="bottom-panels">
+            <div class="timeline-panel">
+                <div class="panel-header">
+                    <h2>📊 DVR Timeline</h2>
+                    <span class="panel-info" id="timelineInfo">Click to jump</span>
+                </div>
+                <canvas id="timelineCanvas"></canvas>
+            </div>
+            <div class="clips-panel">
+                <div class="clips-header">
+                    <h2>🎬 Clips</h2>
+                    <span class="clip-badge" id="clipCountBadge">0</span>
+                </div>
+                <div class="clips-list" id="clipsGrid">
+                    <p class="empty-msg">Select a date</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // DVR PLAYER - Fetches video data from API
+        // ============================================
+        
+        class DVRPlayer {
+            constructor() {
+                this.video = document.getElementById('videoPlayer');
+                this.videoWrapper = document.getElementById('videoWrapper');
+                this.drawCanvas = document.getElementById('drawCanvas');
+                this.drawCtx = this.drawCanvas.getContext('2d');
+                this.overlay = document.getElementById('videoOverlay');
+                this.timelineCanvas = document.getElementById('timelineCanvas');
+                this.timelineCtx = this.timelineCanvas.getContext('2d');
+                
+                this.videoData = {}; // Will be populated from API
+                this.cameras = [];
+                this.currentCam = null;
+                this.currentDate = null;
+                this.currentClips = [];
+                this.currentIndex = -1;
+                this.autoPlay = false;
+                this.playbackSpeed = 1;
+                this.drawingEnabled = false;
+                this.isDrawing = false;
+                this.brushColor = '#ff3333';
+                this.brushSize = 3;
+                this.isEraserActive = false;
+                this.isLoading = false;
+
+                this.init();
+            }
+
+            async init() {
+                this.setupEventListeners();
+                this.initDrawing();
+                this.setupKeyboardShortcuts();
+                await this.loadCameras();
+                this.resizeDrawCanvas();
+                this.setupTimelineCanvas();
+                window.addEventListener('resize', () => { this.resizeDrawCanvas(); this.setupTimelineCanvas(); });
+            }
+
+            async loadCameras() {
+                try {
+                    const response = await fetch('/api/cameras');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.cameras = data.cameras;
+                        const select = document.getElementById('cameraSelect');
+                        select.innerHTML = '<option value="">Select camera...</option>';
+                        
+                        if (this.cameras.length === 0) {
+                            select.innerHTML = '<option value="">No cameras found</option>';
+                            return;
+                        }
+
+                        this.cameras.forEach(cam => {
+                            const opt = document.createElement('option');
+                            opt.value = cam.id;
+                            opt.textContent = cam.name;
+                            select.appendChild(opt);
+                        });
+
+                        // Auto-select first camera
+                        if (this.cameras.length > 0) {
+                            select.value = this.cameras[0].id;
+                            await this.selectCamera(this.cameras[0].id);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to load cameras:', error);
+                    document.getElementById('cameraSelect').innerHTML = '<option value="">Error loading cameras</option>';
+                }
+            }
+
+            async selectCamera(camId) {
+                if (!camId) return;
+                
+                this.currentCam = camId;
+                this.currentDate = null;
+                this.currentClips = [];
+                this.currentIndex = -1;
+                
+                document.getElementById('dateSelect').innerHTML = '<option value=""><span class="loading-spinner"></span> Loading...</option>';
+                
+                try {
+                    const response = await fetch(`/api/videos/${camId}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.videoData[camId] = data.dates;
+                        this.renderDates();
+                        this.renderClips();
+                        this.updateClipDropdown();
+                        this.resetPlayer();
+                    }
+                } catch (error) {
+                    console.error('Failed to load videos:', error);
+                    document.getElementById('dateSelect').innerHTML = '<option value="">Error loading dates</option>';
+                }
+            }
+
+            renderDates() {
+                const s = document.getElementById('dateSelect');
+                s.innerHTML = '<option value="">Select date...</option>';
+                const dates = this.videoData[this.currentCam];
+                if (!dates) return;
+                
+                Object.keys(dates).sort().reverse().forEach(date => {
+                    const c = dates[date].clips.length;
+                    const o = document.createElement('option');
+                    o.value = date;
+                    o.textContent = `${this.formatDate(date)} (${c} clip${c>1?'s':''})`;
+                    s.appendChild(o);
+                });
+            }
+
+            selectDate(date) {
+                this.currentDate = date;
+                this.currentClips = this.videoData[this.currentCam]?.[date]?.clips || [];
+                this.currentIndex = -1;
+                this.updateClipDropdown();
+                this.renderClips();
+                this.resetPlayer();
+                this.drawTimeline();
+            }
+
+            updateClipDropdown() {
+                const s = document.getElementById('clipSelect');
+                s.innerHTML = '<option value="">Select clip...</option>';
+                if (!this.currentDate || !this.currentClips.length) return;
+                this.currentClips.forEach((c, i) => {
+                    const o = document.createElement('option');
+                    o.value = i;
+                    o.textContent = `${c.time} - ${c.file.split('/').pop()}`;
+                    s.appendChild(o);
+                });
+            }
+
+            renderClips() {
+                const c = document.getElementById('clipsGrid'), b = document.getElementById('clipCountBadge');
+                if (!this.currentDate) { c.innerHTML = '<p class="empty-msg">Select a date</p>'; b.textContent = '0'; return; }
+                b.textContent = this.currentClips.length;
+                if (!this.currentClips.length) { c.innerHTML = '<p class="empty-msg">No clips</p>'; return; }
+                c.innerHTML = this.currentClips.map((cl, i) => `<button class="clip-chip" data-index="${i}">🎬 ${cl.time}</button>`).join('');
+                c.querySelectorAll('.clip-chip').forEach(btn => btn.addEventListener('click', () => this.playClip(parseInt(btn.dataset.index))));
+            }
+
+            playClip(index) {
+                if (index < 0 || index >= this.currentClips.length) return;
+                this.currentIndex = index;
+                const clip = this.currentClips[index];
+                this.overlay.classList.remove('hidden');
+                this.overlay.querySelector('p').textContent = '⏳ Loading...';
+                this.video.src = clip.file;
+                this.video.playbackRate = this.playbackSpeed;
+                this.video.load();
+                this.video.play().then(() => this.overlay.classList.add('hidden')).catch(() => this.overlay.querySelector('p').textContent = '⚠️ Cannot play');
+                
+                const camName = this.cameras.find(c => c.id === this.currentCam)?.name || this.currentCam;
+                document.getElementById('nowPlayingText').textContent = `${camName} | ${this.formatDate(this.currentDate)} | ${clip.time}`;
+                document.getElementById('clipSelect').value = index;
+                document.querySelectorAll('.clip-chip').forEach((ch, i) => ch.classList.toggle('playing', i===index));
+                document.getElementById('timelineInfo').textContent = `Clip ${index+1}/${this.currentClips.length}`;
+                this.clearDrawing();
+                this.drawTimeline();
+            }
+
+            nextClip() { if (this.currentIndex < this.currentClips.length-1) this.playClip(this.currentIndex+1); else if (this.autoPlay && this.currentClips.length) this.playClip(0); }
+            prevClip() { if (this.currentIndex > 0) this.playClip(this.currentIndex-1); }
+            
+            togglePlay() {
+                if (this.video.paused || this.video.ended) {
+                    if (this.currentIndex===-1 && this.currentClips.length) this.playClip(0);
+                    else this.video.play().catch(()=>{});
+                } else this.video.pause();
+            }
+
+            toggleAuto() {
+                this.autoPlay = !this.autoPlay;
+                const btn = document.getElementById('autoBtn');
+                if (this.autoPlay) { btn.textContent = '🔁 AUTO ON'; btn.classList.remove('auto-off'); btn.classList.add('auto-on'); }
+                else { btn.textContent = '🔁 AUTO OFF'; btn.classList.remove('auto-on'); btn.classList.add('auto-off'); }
+            }
+
+            updatePlayBtn() { document.getElementById('playBtn').textContent = (!this.video.paused && !this.video.ended) ? '⏸ PAUSE' : '▶ PLAY'; }
+            
+            resetPlayer() {
+                this.video.src = ''; this.video.load();
+                this.overlay.classList.remove('hidden');
+                this.overlay.querySelector('p').textContent = '◈ Select Camera → Date → Clip';
+                document.getElementById('nowPlayingText').textContent = 'No clip selected';
+                document.getElementById('timelineInfo').textContent = 'Click to jump';
+                document.getElementById('clipSelect').value = '';
+                this.currentIndex = -1;
+                this.updatePlayBtn();
+                this.clearDrawing();
+                this.drawTimeline();
+            }
+
+            /* ===== EVENT LISTENERS ===== */
+            setupEventListeners() {
+                document.getElementById('cameraSelect').addEventListener('change', (e) => this.selectCamera(e.target.value));
+                document.getElementById('dateSelect').addEventListener('change', (e) => this.selectDate(e.target.value));
+                document.getElementById('clipSelect').addEventListener('change', (e) => {
+                    const i = parseInt(e.target.value);
+                    if (i >= 0) this.playClip(i);
+                });
+
+                this.video.addEventListener('play', () => { this.overlay.classList.add('hidden'); this.updatePlayBtn(); });
+                this.video.addEventListener('pause', () => this.updatePlayBtn());
+                this.video.addEventListener('ended', () => { if (this.autoPlay) this.nextClip(); else this.updatePlayBtn(); });
+                this.video.addEventListener('timeupdate', () => this.drawTimeline());
+                this.video.addEventListener('loadedmetadata', () => { this.resizeDrawCanvas(); this.drawTimeline(); });
+
+                document.getElementById('playBtn').addEventListener('click', () => this.togglePlay());
+                document.getElementById('prevBtn').addEventListener('click', () => this.prevClip());
+                document.getElementById('nextBtn').addEventListener('click', () => this.nextClip());
+                document.getElementById('autoBtn').addEventListener('click', () => this.toggleAuto());
+
+                document.querySelectorAll('.speed-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        this.playbackSpeed = parseFloat(btn.dataset.speed);
+                        this.video.playbackRate = this.playbackSpeed;
+                    });
+                });
+
+                document.getElementById('skipBackBtn').addEventListener('click', () => this.video.currentTime = Math.max(0, this.video.currentTime - 10));
+                document.getElementById('skipFwdBtn').addEventListener('click', () => this.video.currentTime = Math.min(this.video.duration||0, this.video.currentTime + 10));
+                this.timelineCanvas.addEventListener('click', (e) => this.onTimelineClick(e));
+            }
+
+            setupKeyboardShortcuts() {
+                document.addEventListener('keydown', (e) => {
+                    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+                    if (e.key === ' ') { e.preventDefault(); this.togglePlay(); }
+                    if (e.key === 'ArrowLeft') { e.preventDefault(); this.video.currentTime = Math.max(0, this.video.currentTime - 10); }
+                    if (e.key === 'ArrowRight') { e.preventDefault(); this.video.currentTime = Math.min(this.video.duration||0, this.video.currentTime + 10); }
+                });
+            }
+
+            /* ===== DRAWING ===== */
+            toggleDrawing() {
+                this.drawingEnabled = !this.drawingEnabled;
+                const toggle = document.getElementById('brushToggle');
+                const elements = [
+                    document.getElementById('colorRed'), document.getElementById('colorBlue'),
+                    document.getElementById('eraserBtn'), document.getElementById('brushSize'), document.getElementById('clearBrushBtn')
+                ];
+                if (this.drawingEnabled) {
+                    toggle.classList.add('active'); toggle.textContent = '✏️ DRAW ON';
+                    this.drawCanvas.classList.add('active');
+                    elements.forEach(el => el.classList.remove('hidden'));
+                    this.video.pause();
+                } else {
+                    toggle.classList.remove('active'); toggle.textContent = '✏️ DRAW';
+                    this.drawCanvas.classList.remove('active');
+                    elements.forEach(el => el.classList.add('hidden'));
+                    this.isDrawing = false;
+                }
+            }
+
+            initDrawing() {
+                document.getElementById('brushToggle').addEventListener('click', () => this.toggleDrawing());
+                
+                const startDraw = (e) => {
+                    if (!this.drawingEnabled) return;
+                    e.preventDefault(); this.isDrawing = true;
+                    const p = this.getPos(e.touches ? e.touches[0] : e);
+                    this.drawCtx.beginPath(); this.drawCtx.moveTo(p.x, p.y);
+                };
+                const moveDraw = (e) => {
+                    if (!this.drawingEnabled || !this.isDrawing) return;
+                    e.preventDefault();
+                    const p = this.getPos(e.touches ? e.touches[0] : e);
+                    this.drawCtx.lineTo(p.x, p.y);
+                    this.drawCtx.globalCompositeOperation = this.isEraserActive ? 'destination-out' : 'source-over';
+                    this.drawCtx.strokeStyle = this.brushColor;
+                    this.drawCtx.lineWidth = this.isEraserActive ? this.brushSize*4 : this.brushSize;
+                    this.drawCtx.lineCap = 'round'; this.drawCtx.lineJoin = 'round';
+                    this.drawCtx.stroke();
+                };
+                const stopDraw = () => { this.isDrawing = false; this.drawCtx.globalCompositeOperation = 'source-over'; };
+
+                this.drawCanvas.addEventListener('mousedown', startDraw);
+                this.drawCanvas.addEventListener('mousemove', moveDraw);
+                this.drawCanvas.addEventListener('mouseup', stopDraw);
+                this.drawCanvas.addEventListener('mouseleave', stopDraw);
+                this.drawCanvas.addEventListener('touchstart', startDraw);
+                this.drawCanvas.addEventListener('touchmove', moveDraw);
+                this.drawCanvas.addEventListener('touchend', stopDraw);
+
+                document.querySelectorAll('.brush-color').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.brush-color').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        this.brushColor = btn.dataset.color;
+                        this.isEraserActive = false;
+                        document.getElementById('eraserBtn').classList.remove('brush-active-eraser');
+                    });
+                });
+
+                document.getElementById('eraserBtn').addEventListener('click', () => {
+                    this.isEraserActive = !this.isEraserActive;
+                    const eb = document.getElementById('eraserBtn');
+                    if (this.isEraserActive) {
+                        eb.classList.add('brush-active-eraser');
+                        document.querySelectorAll('.brush-color').forEach(b => b.classList.remove('active'));
+                    } else {
+                        eb.classList.remove('brush-active-eraser');
+                        const fc = document.querySelector('.brush-color');
+                        if (fc) { fc.classList.add('active'); this.brushColor = fc.dataset.color; }
+                    }
+                });
+
+                document.getElementById('brushSize').addEventListener('input', (e) => this.brushSize = parseInt(e.target.value));
+                document.getElementById('clearBrushBtn').addEventListener('click', () => this.clearDrawing());
+            }
+
+            resizeDrawCanvas() {
+                const r = this.videoWrapper.getBoundingClientRect();
+                this.drawCanvas.width = r.width;
+                this.drawCanvas.height = r.height;
+            }
+
+            getPos(e) {
+                const r = this.drawCanvas.getBoundingClientRect();
+                return { x: (e.clientX-r.left)*(this.drawCanvas.width/r.width), y: (e.clientY-r.top)*(this.drawCanvas.height/r.height) };
+            }
+
+            clearDrawing() { this.drawCtx.clearRect(0, 0, this.drawCanvas.width, this.drawCanvas.height); }
+
+            /* ===== TIMELINE ===== */
+            setupTimelineCanvas() {
+                const p = this.timelineCanvas.parentElement;
+                this.timelineCanvas.width = p.clientWidth;
+                this.timelineCanvas.height = p.clientHeight - 30;
+                this.drawTimeline();
+            }
+
+            drawTimeline() {
+                const ctx = this.timelineCtx, w = this.timelineCanvas.width, h = this.timelineCanvas.height;
+                ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#12121f'; ctx.fillRect(0, 0, w, h);
+                if (!this.currentClips.length) { ctx.fillStyle = '#8888aa'; ctx.font = '12px "Space Grotesk"'; ctx.textAlign = 'center'; ctx.fillText('No clips', w/2, h/2); return; }
+                const pad=20, trackY=h/2-10, trackH=20, trackW=w-pad*2;
+                ctx.fillStyle='#1a1a2e'; ctx.strokeStyle='#252540'; this.rr(ctx,pad,trackY,trackW,trackH,4); ctx.fill(); ctx.stroke();
+                this.currentClips.forEach((cl,i)=>{
+                    const x=pad+(i/this.currentClips.length)*trackW, segW=Math.max(trackW/this.currentClips.length-2,4);
+                    let color='#3a3a5a'; if(i===this.currentIndex) color='#00d4ff'; else if(i<this.currentIndex) color='#7b61ff';
+                    ctx.fillStyle=color; this.rr(ctx,x+1,trackY+2,segW,trackH-4,3); ctx.fill();
+                    if(segW>30){ctx.fillStyle='#fff'; ctx.font='9px "JetBrains Mono"'; ctx.textAlign='center'; ctx.fillText(cl.time,x+segW/2,trackY+trackH/2+3);}
+                });
+                if(this.currentIndex>=0 && this.video.duration){
+                    const segW=Math.max(trackW/this.currentClips.length-2,4), clipX=pad+(this.currentIndex/this.currentClips.length)*trackW;
+                    const px=clipX+1+(this.video.currentTime/(this.video.duration||1))*segW;
+                    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(px,trackY+trackH/2,5,0,Math.PI*2); ctx.fill();
+                    ctx.strokeStyle='#00d4ff'; ctx.lineWidth=2; ctx.stroke();
+                }
+            }
+
+            onTimelineClick(e) {
+                if(!this.currentClips.length) return;
+                const r=this.timelineCanvas.getBoundingClientRect(), x=e.clientX-r.left, pad=20, trackW=this.timelineCanvas.width-pad*2, relX=x-pad;
+                if(relX<0||relX>trackW) return;
+                const i=Math.floor((relX/trackW)*this.currentClips.length);
+                if(i>=0&&i<this.currentClips.length) this.playClip(i);
+            }
+
+            rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
+
+            formatDate(d){const[m,mon,day]=d.split('-');const ms=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return`${day} ${ms[parseInt(mon)-1]} ${m}`;}
+        }
+
+        document.addEventListener('DOMContentLoaded', () => new DVRPlayer());
+    </script>
+</body>
+</html>
